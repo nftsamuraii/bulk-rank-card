@@ -241,6 +241,20 @@ async function generateCard() {
   tmpCanvas.getContext('2d').putImageData(bgPixels, 0, 0);
   ctx.drawImage(tmpCanvas, 0, 0, W, H);
 
+  // Draw BULK logo top left
+  await new Promise(resolve => {
+    const logo = new Image();
+    logo.crossOrigin = 'anonymous';
+    logo.onload = () => {
+      const logoH = Math.round(H * 0.09);
+      const logoW = Math.round(logoH * (logo.naturalWidth / logo.naturalHeight));
+      ctx.drawImage(logo, Math.round(W * 0.04), Math.round(H * 0.05), logoW, logoH);
+      resolve();
+    };
+    logo.onerror = resolve;
+    logo.src = 'https://raw.githubusercontent.com/nftsamuraii/-bulk-pnl-generator/main/assets/logo_BULK.png';
+  });
+
   // Dark gradient overlay on right so text is always readable
   const grad = ctx.createLinearGradient(W * 0.30, 0, W, 0);
   grad.addColorStop(0, 'rgba(0,0,0,0)');
