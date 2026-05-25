@@ -289,7 +289,7 @@ async function generateCard() {
   // Date bottom left — from AI extracted data
   const dateStr = document.getElementById('rankDate').value;
   if (dateStr) {
-    const DATE_FS = Math.round(H * 0.017);
+    const DATE_FS = Math.round(H * 0.021);
     ctx.save();
     ctx.textAlign = 'left';
     ctx.font = '500 ' + DATE_FS + 'px "BULK", monospace';
