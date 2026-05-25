@@ -119,9 +119,8 @@
         <span>Upload screenshot & background<br>then hit Generate</span>
       </div>
       <canvas id="rankCanvas"></canvas>
-      <button class="btn-generate" id="btnGenerate" onclick="generateCard()">GENERATE</button>
+      <button class="btn-generate" id="btnGenerate" onclick="handleGenerate()">GENERATE</button>
       <button class="btn-action" id="btnDownload" onclick="downloadCard()">⬇ DOWNLOAD</button>
-      <button class="btn-generate" id="btnGenerateVideo" style="display:none;margin-top:10px;background:linear-gradient(135deg,#4a9eff,#2563eb);" onclick="generateVideo()">🎬 GENERATE VIDEO</button>
       <button class="btn-action visible" id="btnDownloadVideo" onclick="downloadVideo()" style="display:none;">⬇ DOWNLOAD VIDEO</button>
       <button class="btn-action" id="btnCopy" onclick="copyCard()">📋 COPY</button>
     </div>
@@ -366,8 +365,20 @@ async function copyCard() {
   }
 }
 
+// ── Smart generate dispatcher ─────────────────────────────
+let currentMode = 'photo';
+
+function handleGenerate() {
+  if (currentMode === 'video') {
+    generateVideo();
+  } else {
+    generateCard();
+  }
+}
+
 // ── Switch photo/video mode ────────────────────────────────
 function switchMode(mode) {
+  currentMode = mode;
   document.getElementById('photoMode').style.display = mode === 'photo' ? 'block' : 'none';
   document.getElementById('videoMode').style.display = mode === 'video' ? 'block' : 'none';
   document.getElementById('btnModePhoto').style.background = mode === 'photo' ? '#c8b882' : 'transparent';
@@ -376,8 +387,19 @@ function switchMode(mode) {
   document.getElementById('btnModeVideo').style.background = mode === 'video' ? '#c8b882' : 'transparent';
   document.getElementById('btnModeVideo').style.color = mode === 'video' ? '#0a0a0a' : '#888';
   document.getElementById('btnModeVideo').style.borderColor = mode === 'video' ? '#c8b882' : '#444';
-  if (mode === 'video' && bgVideoEl) document.getElementById('btnGenerateVideo').style.display = 'block';
-  else document.getElementById('btnGenerateVideo').style.display = 'none';
+
+  const btnGen = document.getElementById('btnGenerate');
+  if (mode === 'video') {
+    btnGen.textContent = '🎬 GENERATE VIDEO';
+    btnGen.style.background = 'linear-gradient(135deg,#4a9eff,#2563eb)';
+  } else {
+    btnGen.textContent = 'GENERATE';
+    btnGen.style.background = 'linear-gradient(135deg,#c8b882 0%,#a89862 100%)';
+  }
+
+  // Reset download video button when switching modes
+  const dlVid = document.getElementById('btnDownloadVideo');
+  dlVid.style.display = 'none';
 }
 
 // ── Load video background ──────────────────────────────────
@@ -401,10 +423,12 @@ function loadVideo(e) {
   e.target.value = '';
 }
 
-// ── Generate Video ─────────────────────────────────────────
 async function generateVideo() {
   if (!bgVideoEl) { alert('Please upload a video first!'); return; }
-  if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); return; }
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop();
+    return;
+  }
 
   const rankNum = document.getElementById('rankNum').value || '#1';
   const roi     = document.getElementById('rankRoi').value || '+0%';
@@ -446,8 +470,25 @@ async function generateVideo() {
     { labelText: 'Win Rate',              labelY: H*0.798, value: win,     valueY: H*0.863, valFS: VAL_FS  },
   ];
 
+  // Load BULK logo once
+  const logo = await new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = 'https://raw.githubusercontent.com/nftsamuraii/-bulk-pnl-generator/main/assets/logo_BULK.png';
+  });
+
   function drawFrame() {
     ctx.drawImage(bgVideoEl, 0, 0, W, H);
+
+    // BULK logo
+    if (logo) {
+      const logoH = Math.round(H * 0.09);
+      const logoW = Math.round(logoH * (logo.naturalWidth / logo.naturalHeight));
+      ctx.drawImage(logo, Math.round(W * 0.04), Math.round(H * 0.05), logoW, logoH);
+    }
+
     const grad = ctx.createLinearGradient(W*0.30, 0, W, 0);
     grad.addColorStop(0, 'rgba(0,0,0,0)');
     grad.addColorStop(1, 'rgba(0,0,0,0.60)');
@@ -484,14 +525,16 @@ async function generateVideo() {
     const dlBtn = document.getElementById('btnDownloadVideo');
     dlBtn.style.display = 'block';
     dlBtn.classList.add('visible');
-    document.getElementById('btnGenerateVideo').textContent = '🎬 GENERATE VIDEO';
+    const btnGen = document.getElementById('btnGenerate');
+    btnGen.textContent = '🎬 GENERATE VIDEO';
+    btnGen.style.background = 'linear-gradient(135deg,#4a9eff,#2563eb)';
     document.getElementById('emptyState').style.display = 'none';
     canvas.style.display = 'block';
     bgVideoEl.pause();
   };
 
   mediaRecorder.start();
-  document.getElementById('btnGenerateVideo').textContent = '⏹ STOP RECORDING';
+  document.getElementById('btnGenerate').textContent = '⏹ STOP RECORDING';
   document.getElementById('emptyState').style.display = 'none';
   canvas.style.display = 'block';
 
