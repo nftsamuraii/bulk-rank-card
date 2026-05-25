@@ -75,12 +75,25 @@
       <div class="status-box" id="statusBox">Analyzing...</div>
 
       <h2>Step 2 — New Background</h2>
-      <label class="upload-zone" id="bgZone">
-        <input type="file" accept="image/*" onchange="loadBackground(event)">
-        <div class="bg-preview" id="bgPreview"></div>
-        <div class="icon" id="bgIcon">🖼</div>
-        <p id="bgLabel">Upload a clean background photo<br><span style="color:#555;font-size:10px;">Without any text</span></p>
-      </label>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button onclick="switchMode('photo')" id="btnModePhoto" style="flex:1;padding:8px;border-radius:8px;border:1px solid #c8b882;background:#c8b882;color:#0a0a0a;font-family:'IBM Plex Sans',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer;">📷 PHOTO</button>
+        <button onclick="switchMode('video')" id="btnModeVideo" style="flex:1;padding:8px;border-radius:8px;border:1px solid #444;background:transparent;color:#888;font-family:'IBM Plex Sans',sans-serif;font-size:12px;letter-spacing:1px;cursor:pointer;">🎬 VIDEO</button>
+      </div>
+      <div id="photoMode">
+        <label class="upload-zone" id="bgZone">
+          <input type="file" accept="image/*" onchange="loadBackground(event)">
+          <div class="bg-preview" id="bgPreview"></div>
+          <div class="icon" id="bgIcon">🖼</div>
+          <p id="bgLabel">Upload a clean background photo<br><span style="color:#555;font-size:10px;">Without any text</span></p>
+        </label>
+      </div>
+      <div id="videoMode" style="display:none;">
+        <label class="upload-zone" id="videoZone">
+          <input type="file" accept="video/*" onchange="loadVideo(event)">
+          <div class="icon" id="videoIcon">🎬</div>
+          <p id="videoLabel">Upload a video as background<br><span style="color:#555;font-size:10px;">Stats will be overlaid on the video</span></p>
+        </label>
+      </div>
 
       <h2>Stats (auto-filled)</h2>
       <div class="field">
@@ -108,6 +121,8 @@
       <canvas id="rankCanvas"></canvas>
       <button class="btn-generate" id="btnGenerate" onclick="generateCard()">GENERATE</button>
       <button class="btn-action" id="btnDownload" onclick="downloadCard()">⬇ DOWNLOAD</button>
+      <button class="btn-generate" id="btnGenerateVideo" style="display:none;margin-top:10px;background:linear-gradient(135deg,#4a9eff,#2563eb);" onclick="generateVideo()">🎬 GENERATE VIDEO</button>
+      <button class="btn-action" id="btnDownloadVideo" onclick="downloadVideo()" style="display:none;">⬇ DOWNLOAD VIDEO</button>
       <button class="btn-generate" id="btnGenerateVideo" style="display:none;margin-top:10px;background:linear-gradient(135deg,#4a9eff,#2563eb);" onclick="generateVideo()">🎬 GENERATE VIDEO</button>
       <button class="btn-action" id="btnDownloadVideo" onclick="downloadVideo()" style="display:none;">⬇ DOWNLOAD VIDEO</button>
       <button class="btn-action" id="btnCopy" onclick="copyCard()">📋 COPY</button>
@@ -351,6 +366,149 @@ async function copyCard() {
     try { window.open(canvas.toDataURL('image/png'), '_blank'); }
     catch(e2) { alert('Could not copy. Try Download instead.'); }
   }
+}
+
+// ── Switch photo/video mode ────────────────────────────────
+function switchMode(mode) {
+  document.getElementById('photoMode').style.display = mode === 'photo' ? 'block' : 'none';
+  document.getElementById('videoMode').style.display = mode === 'video' ? 'block' : 'none';
+  document.getElementById('btnModePhoto').style.background = mode === 'photo' ? '#c8b882' : 'transparent';
+  document.getElementById('btnModePhoto').style.color = mode === 'photo' ? '#0a0a0a' : '#888';
+  document.getElementById('btnModePhoto').style.borderColor = mode === 'photo' ? '#c8b882' : '#444';
+  document.getElementById('btnModeVideo').style.background = mode === 'video' ? '#c8b882' : 'transparent';
+  document.getElementById('btnModeVideo').style.color = mode === 'video' ? '#0a0a0a' : '#888';
+  document.getElementById('btnModeVideo').style.borderColor = mode === 'video' ? '#c8b882' : '#444';
+  if (mode === 'video' && bgVideoEl) document.getElementById('btnGenerateVideo').style.display = 'block';
+  else document.getElementById('btnGenerateVideo').style.display = 'none';
+}
+
+// ── Load video background ──────────────────────────────────
+let bgVideoEl = null;
+let recordedChunks = [];
+let mediaRecorder = null;
+
+function loadVideo(e) {
+  const file = e.target.files[0]; if (!file) return;
+  bgVideoEl = document.createElement('video');
+  bgVideoEl.src = URL.createObjectURL(file);
+  bgVideoEl.loop = true;
+  bgVideoEl.muted = true;
+  bgVideoEl.playsInline = true;
+  bgVideoEl.onloadedmetadata = () => {
+    document.getElementById('videoIcon').style.display = 'none';
+    document.getElementById('videoLabel').innerHTML = '<span class="loaded">✓ ' + file.name + '</span><br><span style="color:#555;font-size:10px;">Click GENERATE VIDEO below</span>';
+    document.getElementById('videoZone').classList.add('has-file');
+    document.getElementById('btnGenerateVideo').style.display = 'block';
+  };
+  e.target.value = '';
+}
+
+// ── Generate Video ─────────────────────────────────────────
+async function generateVideo() {
+  if (!bgVideoEl) { alert('Please upload a video first!'); return; }
+  if (mediaRecorder && mediaRecorder.state === 'recording') { mediaRecorder.stop(); return; }
+
+  const rankNum = document.getElementById('rankNum').value || '#1';
+  const roi     = document.getElementById('rankRoi').value || '+0%';
+  const pnl     = document.getElementById('rankPnl').value || '$0';
+  const vol     = document.getElementById('rankVol').value || '$0';
+  const win     = document.getElementById('rankWin').value || '0%';
+  const dateStr = document.getElementById('rankDate').value || '';
+
+  const canvas = document.getElementById('rankCanvas');
+  const ctx = canvas.getContext('2d');
+  const W = 762, H = 824;
+  canvas.width = W; canvas.height = H;
+
+  try {
+    await Promise.race([
+      Promise.all([
+        document.fonts.load('400 72px "Terminal Grotesque"'),
+        document.fonts.load('400 18px "IBM Plex Sans"'),
+        document.fonts.load('500 14px "BULK"'),
+      ]),
+      new Promise((_,r) => setTimeout(r, 3000))
+    ]);
+  } catch(e) {}
+
+  bgVideoEl.currentTime = 0;
+  await bgVideoEl.play();
+
+  const RANK_FS  = Math.round(H * 0.133);
+  const VAL_FS   = Math.round(H * 0.068);
+  const LABEL_FS = Math.round(H * 0.026);
+  const DATE_FS  = Math.round(H * 0.024);
+  const TX = Math.round(W * 0.952);
+
+  const rows = [
+    { labelText: 'Your Global Rank',      labelY: H*0.230, value: rankNum, valueY: H*0.355, valFS: RANK_FS },
+    { labelText: 'Net Realized PnL',      labelY: H*0.430, value: pnl,     valueY: H*0.498, valFS: VAL_FS  },
+    { labelText: 'Cashflow Adjusted ROI', labelY: H*0.555, value: roi,     valueY: H*0.618, valFS: VAL_FS  },
+    { labelText: 'Total Vol',             labelY: H*0.675, value: vol,     valueY: H*0.743, valFS: VAL_FS  },
+    { labelText: 'Win Rate',              labelY: H*0.798, value: win,     valueY: H*0.863, valFS: VAL_FS  },
+  ];
+
+  function drawFrame() {
+    ctx.drawImage(bgVideoEl, 0, 0, W, H);
+    const grad = ctx.createLinearGradient(W*0.30, 0, W, 0);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.60)');
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+
+    rows.forEach(row => {
+      ctx.save(); ctx.textAlign = 'right';
+      ctx.font = '400 ' + LABEL_FS + 'px "IBM Plex Sans", sans-serif';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 2;
+      ctx.fillStyle = 'rgba(255,255,255,0.90)';
+      ctx.fillText(row.labelText, TX, row.labelY); ctx.restore();
+
+      ctx.save(); ctx.textAlign = 'right';
+      ctx.font = '400 ' + row.valFS + 'px "Terminal Grotesque", "Share Tech Mono", monospace';
+      ctx.shadowColor = 'rgba(0,0,0,0.95)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 3;
+      ctx.fillStyle = '#FAB54D';
+      ctx.fillText(row.value, TX, row.valueY); ctx.restore();
+    });
+
+    if (dateStr) {
+      ctx.save(); ctx.textAlign = 'left';
+      ctx.font = '500 ' + DATE_FS + 'px "BULK", monospace';
+      ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = 'rgba(255,255,255,1)';
+      ctx.fillText(dateStr, Math.round(W*0.04), Math.round(H*0.952)); ctx.restore();
+    }
+  }
+
+  const stream = canvas.captureStream(30);
+  recordedChunks = [];
+  mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    document.getElementById('btnDownloadVideo').style.display = 'block';
+    document.getElementById('btnGenerateVideo').textContent = '🎬 GENERATE VIDEO';
+    document.getElementById('emptyState').style.display = 'none';
+    canvas.style.display = 'block';
+    bgVideoEl.pause();
+  };
+
+  mediaRecorder.start();
+  document.getElementById('btnGenerateVideo').textContent = '⏹ STOP RECORDING';
+  document.getElementById('emptyState').style.display = 'none';
+  canvas.style.display = 'block';
+
+  function animate() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      drawFrame(); requestAnimationFrame(animate);
+    }
+  }
+  animate();
+}
+
+function downloadVideo() {
+  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'bulk-rank-video.webm';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 document.addEventListener('paste', e => {
