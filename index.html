@@ -519,7 +519,7 @@ async function generateVideo() {
   document.getElementById('emptyState').style.display = 'none';
   canvas.style.display = 'block';
 
-  const stream = canvas.captureStream(30);
+  const stream = canvas.captureStream(60);
   recordedChunks = [];
 
   const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
@@ -528,7 +528,7 @@ async function generateVideo() {
     ? 'video/webm'
     : 'video/mp4';
 
-  mediaRecorder = new MediaRecorder(stream, { mimeType });
+  mediaRecorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 20_000_000 });
   mediaRecorder.ondataavailable = e => { if (e.data.size > 0) recordedChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     bgVideoEl.loop = true;
@@ -538,6 +538,8 @@ async function generateVideo() {
     dlBtn.classList.add('visible');
     btnGen.disabled = false;
     btnGen.textContent = '🎬 GENERATE VIDEO';
+    // Store mime for download
+    window._videoMime = mimeType;
   };
 
   // Auto-stop when video ends — one full loop recorded
@@ -558,10 +560,12 @@ async function generateVideo() {
 }
 
 function downloadVideo() {
-  const blob = new Blob(recordedChunks, { type: 'video/webm' });
+  const mime = window._videoMime || 'video/webm';
+  const ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(recordedChunks, { type: mime });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'bulk-rank-video.webm';
+  a.download = 'bulk-rank-video.' + ext;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
